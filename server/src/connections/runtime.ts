@@ -18,15 +18,16 @@ import {
   shQuote,
 } from "../utils/process-utils";
 import { createWorkspaceAutoSync } from "../workspace/auto-sync";
+import { createDirectoryHandlers } from "../workspace/directories";
 import { createFileHandlers } from "../workspace/files";
 import { runBinaryProcessWithTimeout } from "../workspace/process";
 import { createStatusEnricher } from "../workspace/status";
-import { createWorktreeHookRunner } from "../worktree/worktree-hooks";
 import { createWorktreeParentStore } from "../worktree/parents";
 import {
   createWorktreeRemovalCoordinator,
   createWorktreeRemovalRuntime,
 } from "../worktree/remove";
+import { createWorktreeHookRunner } from "../worktree/worktree-hooks";
 import { createAgentStatusSubscriptionLoop } from "./agent-status-subscription";
 import { sanitizeConnectionError } from "./manager";
 import { createEventSubscriptionLoop } from "./subscription-loop";
@@ -101,6 +102,11 @@ export function createLegacyConnectionRuntime(args: {
   });
   const files = createFileHandlers({
     herdr,
+    sshHost,
+    runProcessWithCodeTimeout,
+    shQuote,
+  });
+  const directories = createDirectoryHandlers({
     sshHost,
     runProcessWithCodeTimeout,
     shQuote,
@@ -299,6 +305,7 @@ export function createLegacyConnectionRuntime(args: {
     handleImageUpload,
     handleSettingsRpc,
     files,
+    directories,
     status,
     workspaceAutoSync,
     worktreeHooks,
