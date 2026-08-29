@@ -174,6 +174,7 @@ export interface FilePreview {
   mime_type?: string;
   image_data_url?: string;
   truncated: boolean;
+  resource_revision?: number;
 }
 
 export type GitDiffKind =
