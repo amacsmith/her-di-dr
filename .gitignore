@@ -19,3 +19,4 @@ server/src/public-files.gen.ts
 server/herdr-gui
 server/herdr-gui-*
 server/*.bun-build
+.repo_memory/

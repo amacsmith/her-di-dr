@@ -1,7 +1,9 @@
+import { FolderOpen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { luckyWorkspaceName } from "../luckyName";
 import { store } from "../store";
 import { CloseButton } from "./CloseButton";
+import { DirectoryPickerDialog } from "./DirectoryPickerDialog";
 import { focusDialogElement } from "./dialogFocus";
 
 export function CreateWorkspaceDialog({
@@ -13,18 +15,26 @@ export function CreateWorkspaceDialog({
 }) {
   const [label, setLabel] = useState("");
   const [cwd, setCwd] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const labelRef = useRef<HTMLInputElement>(null);
   const onCloseRef = useRef(onClose);
 
+  const pickerOpenRef = useRef(false);
+
   onCloseRef.current = onClose;
+  pickerOpenRef.current = pickerOpen;
 
   useEffect(() => {
     if (!open) return;
     setLabel(luckyWorkspaceName());
     setCwd("");
+    setPickerOpen(false);
     const cancelFocus = focusDialogElement(labelRef.current, { select: true });
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
+      if (e.key !== "Escape") return;
+      // The folder picker owns Escape while it is open.
+      if (pickerOpenRef.current) return;
+      onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -68,11 +78,25 @@ export function CreateWorkspaceDialog({
 
         <label className="form-field">
           <span>CWD</span>
-          <input
-            value={cwd}
-            onChange={(e) => setCwd(e.currentTarget.value)}
-            placeholder="Optional path"
-          />
+          <div className="form-field-row">
+            <input
+              value={cwd}
+              onChange={(e) => setCwd(e.currentTarget.value)}
+              placeholder="Optional path"
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+            />
+            <button
+              type="button"
+              className="ghost icon-button"
+              title="Browse folders"
+              aria-label="Browse folders"
+              onClick={() => setPickerOpen(true)}
+            >
+              <FolderOpen size={14} />
+            </button>
+          </div>
         </label>
 
         <div className="modal-actions">
@@ -82,6 +106,16 @@ export function CreateWorkspaceDialog({
           <button type="submit">Create</button>
         </div>
       </form>
+      {pickerOpen && (
+        <DirectoryPickerDialog
+          open={pickerOpen}
+          initialPath={cwd.trim()}
+          title="Workspace Folder"
+          selectLabel="Use This Folder"
+          onSelect={(path) => setCwd(path)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }

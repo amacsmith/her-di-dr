@@ -1,5 +1,5 @@
-import type { ServerWebSocket } from "bun";
 import { rmSync } from "node:fs";
+import type { ServerWebSocket } from "bun";
 import packageJson from "../../package.json";
 import type { SshTunnelConfig } from "./bridge/ssh-tunnel";
 import {
@@ -42,7 +42,6 @@ import {
   type ConnectionProfile,
   ConnectionProfileStore,
 } from "./connections/profiles";
-import { createSshProfileRuntimeConfig } from "./connections/ssh-profile-runtime";
 import {
   ConnectionRoutingError,
   createConnectionReplyPublisher,
@@ -63,6 +62,7 @@ import {
   type LegacyConnectionRuntime,
 } from "./connections/runtime";
 import { createShutdownController } from "./connections/shutdown";
+import { createSshProfileRuntimeConfig } from "./connections/ssh-profile-runtime";
 import { bindListenerBeforeConnectionStart } from "./connections/startup";
 import { LEGACY_DEFAULT_CONNECTION_ID } from "./connections/types";
 import { createAuthHandlers } from "./http/auth";
@@ -694,6 +694,7 @@ async function handleRpc(ws: ServerWebSocket<unknown>, raw: string) {
     runGitPull,
     resolveWorkspaceGitRoot,
   } = connection.files;
+  const { listDirectories, createDirectory } = connection.directories;
   const { enrichWorkspacesWithGitStatus, invalidateGitStatus } =
     connection.status;
   const {
@@ -733,6 +734,24 @@ async function handleRpc(ws: ServerWebSocket<unknown>, raw: string) {
       sendReply({ id, result }, "file-list");
     } catch (e) {
       sendError("file-list-error", e);
+    }
+    return;
+  }
+  if (method === "directory.list") {
+    try {
+      const result = await listDirectories(params ?? {});
+      sendReply({ id, result }, "directory-list");
+    } catch (e) {
+      sendError("directory-list-error", e);
+    }
+    return;
+  }
+  if (method === "directory.create") {
+    try {
+      const result = await createDirectory(params ?? {});
+      sendReply({ id, result }, "directory-create");
+    } catch (e) {
+      sendError("directory-create-error", e);
     }
     return;
   }

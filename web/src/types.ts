@@ -146,6 +146,21 @@ export interface FileExplorerList {
   truncated: boolean;
 }
 
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  hidden: boolean;
+}
+
+export interface DirectoryList {
+  path: string;
+  parent: string | null;
+  home: string;
+  separator: string;
+  entries: DirectoryEntry[];
+  truncated: boolean;
+}
+
 export interface FilePreview {
   workspace_id: string;
   repo_name?: string;
