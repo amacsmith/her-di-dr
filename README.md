@@ -1,5 +1,8 @@
 # Herdr Studio
 
+> A fork of [Herdr Studio](https://github.com/powerfooI/herdr-studio) by Arthur,
+> used under the MIT License. See [NOTICE.md](./NOTICE.md).
+
 A minimal **web client** for [Herdr](https://herdr.dev). It connects to a
 running Herdr server through its local socket API and provides a browser and PWA
 dashboard for workspaces, tabs, panes, terminals, agents, files, and diffs.
