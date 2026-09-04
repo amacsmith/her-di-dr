@@ -1,22 +1,36 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  browseRoots,
   createDirectoryHandlers,
   createLocalDirectory,
   expandHomePath,
+  isBrowsable,
   listLocalDirectories,
   parentDirectory,
   parseRemoteDirectoryList,
   sanitizeDirectoryName,
 } from "./directories";
 
+/**
+ * A temp directory the browser is allowed to reach.
+ *
+ * `$TMPDIR` is outside `$HOME`, and browsing is now confined to `$HOME` plus
+ * whatever an operator declares. These tests declare it — the same escape
+ * hatch a person with code on another volume uses — rather than the fixture
+ * quietly being exempt from the rule it is testing around.
+ */
 async function withTempDir<T>(fn: (dir: string) => Promise<T>) {
   const dir = await mkdtemp(join(tmpdir(), "herdr-gui-test-"));
+  const previous = process.env.HERDR_GUI_BROWSE_ROOTS;
+  process.env.HERDR_GUI_BROWSE_ROOTS = await realpath(dir);
   try {
     return await fn(dir);
   } finally {
+    if (previous === undefined) delete process.env.HERDR_GUI_BROWSE_ROOTS;
+    else process.env.HERDR_GUI_BROWSE_ROOTS = previous;
     await rm(dir, { recursive: true, force: true });
   }
 }
@@ -57,7 +71,11 @@ describe("local directory browsing", () => {
 
       const visible = await listLocalDirectories(root, false);
       expect(visible.entries.map((entry) => entry.name)).toEqual(["src"]);
-      expect(visible.parent).toBe(parentDirectory(visible.path));
+      // The temp dir IS the declared root here, so there is nowhere up to go.
+      // Offering its real parent would put an "up" control in the UI that
+      // always fails.
+      expect(visible.parent).toBeNull();
+      expect(parentDirectory(visible.path)).not.toBeNull();
       expect(visible.separator).toBe("/");
 
       const hidden = await listLocalDirectories(root, true);
@@ -126,5 +144,67 @@ describe("remote directory listing", () => {
     expect(result.entries).toHaveLength(1);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.join(" ")).toContain("build-box");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Containment. `directory.list` and `directory.create` are this fork's own
+// RPCs and accepted any absolute path: they enumerated and created anywhere the
+// server process could reach.
+// ---------------------------------------------------------------------------
+
+describe("browse roots", () => {
+  test("home is a root, and paths under it are browsable", () => {
+    const roots = ["/Users/someone"];
+    expect(isBrowsable("/Users/someone", roots)).toBe(true);
+    expect(isBrowsable("/Users/someone/code/app", roots)).toBe(true);
+  });
+
+  test("a sibling that merely shares a prefix is not inside", () => {
+    // `/Users/someone-else` starts with `/Users/someone` as a STRING and is a
+    // different person's home.
+    expect(isBrowsable("/Users/someone-else", ["/Users/someone"])).toBe(false);
+    expect(isBrowsable("/Users/someoneelse/x", ["/Users/someone"])).toBe(false);
+  });
+
+  test("everything outside every root is refused", () => {
+    const roots = ["/Users/someone"];
+    expect(isBrowsable("/etc", roots)).toBe(false);
+    expect(isBrowsable("/", roots)).toBe(false);
+    expect(isBrowsable("/Users", roots)).toBe(false);
+  });
+
+  test("an operator can name another root explicitly", () => {
+    const previous = process.env.HERDR_GUI_BROWSE_ROOTS;
+    process.env.HERDR_GUI_BROWSE_ROOTS = "/Volumes/Code:~/scratch";
+    try {
+      const roots = browseRoots("/Users/someone");
+      expect(roots).toContain("/Users/someone");
+      expect(roots).toContain("/Volumes/Code");
+      expect(roots).toContain("/Users/someone/scratch");
+    } finally {
+      if (previous === undefined) delete process.env.HERDR_GUI_BROWSE_ROOTS;
+      else process.env.HERDR_GUI_BROWSE_ROOTS = previous;
+    }
+  });
+
+  test("listing refuses a path outside the roots", async () => {
+    await expect(listLocalDirectories("/etc", false)).rejects.toThrow(
+      /outside the directories this server may browse/,
+    );
+  });
+
+  test("creating refuses a parent outside the roots", async () => {
+    await expect(createLocalDirectory("/etc", "pwned")).rejects.toThrow(
+      /outside the directories this server may browse/,
+    );
+  });
+
+  test("listing home still works, and offers no way up out of it", async () => {
+    const result = await listLocalDirectories("~", false);
+    expect(result.path).toBe(await realpath(homedir()));
+    // The true parent of home exists; offering it would put an "up" control in
+    // the UI that always fails.
+    expect(result.parent).toBeNull();
   });
 });

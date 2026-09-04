@@ -86,6 +86,69 @@ export function parseRemoteDirectoryList(stdout: string): DirectoryListResult {
   };
 }
 
+/**
+ * The directories `directory.list` and `directory.create` may reach.
+ *
+ * THESE TWO RPCs ARE THIS FORK'S OWN, and they accepted any absolute path with
+ * no containment: they would enumerate — and create — anywhere the server
+ * process could reach. On a bridge that a browser can talk to, that is a
+ * filesystem browser for whoever gets to the socket.
+ *
+ * The picker exists to choose where a workspace lives, and that is almost
+ * always under $HOME. Anyone who keeps code on another volume names it in
+ * `HERDR_GUI_BROWSE_ROOTS` (colon-separated, `~` allowed) — an explicit,
+ * reviewable decision, rather than the default being "everything".
+ */
+export function browseRoots(home: string): string[] {
+  const declared = (process.env.HERDR_GUI_BROWSE_ROOTS ?? "")
+    .split(":")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => expandHomePath(value, home));
+  return [home, ...declared];
+}
+
+/** True when `targetReal` is one of the roots, or inside one. */
+export function isBrowsable(targetReal: string, roots: string[]): boolean {
+  return roots.some((root) => {
+    const trimmed = root.replace(/\/+$/, "") || "/";
+    return targetReal === trimmed || targetReal.startsWith(`${trimmed}/`);
+  });
+}
+
+/** Resolve each root through symlinks, dropping any that is not there. */
+async function realRoots(home: string): Promise<string[]> {
+  const resolved: string[] = [];
+  for (const root of browseRoots(home)) {
+    try {
+      resolved.push(await realpath(root));
+    } catch {
+      // A configured root that does not exist is not an error worth failing a
+      // directory listing over; it simply grants nothing.
+    }
+  }
+  return resolved.length ? resolved : [home];
+}
+
+function refuseOutside(targetReal: string, roots: string[]): never {
+  throw new Error(
+    `${targetReal} is outside the directories this server may browse ` +
+      `(${roots.join(", ")}). Set HERDR_GUI_BROWSE_ROOTS to add another.`,
+  );
+}
+
+/**
+ * The parent to offer, or null at a boundary.
+ *
+ * Returning the true parent of a root would put an "up" control in the UI that
+ * always fails, which teaches people that refusals are noise.
+ */
+function parentWithin(targetReal: string, roots: string[]): string | null {
+  const parent = parentDirectory(targetReal);
+  if (!parent) return null;
+  return isBrowsable(parent, roots) ? parent : null;
+}
+
 export async function listLocalDirectories(
   requestedPath: string,
   showHidden: boolean,
@@ -94,6 +157,8 @@ export async function listLocalDirectories(
   const expanded = expandHomePath(requestedPath.trim(), home);
   const absolute = isAbsolute(expanded) ? expanded : resolve(home, expanded);
   const targetReal = await realpath(absolute);
+  const roots = await realRoots(home);
+  if (!isBrowsable(targetReal, roots)) refuseOutside(targetReal, roots);
   const dirents = await readdir(targetReal, { withFileTypes: true });
   const entries: DirectoryEntry[] = [];
   let truncated = false;
@@ -119,7 +184,7 @@ export async function listLocalDirectories(
   entries.sort(directoryEntrySort);
   return {
     path: targetReal,
-    parent: parentDirectory(targetReal),
+    parent: parentWithin(targetReal, roots),
     home,
     separator: "/",
     entries,
@@ -135,6 +200,11 @@ export async function createLocalDirectory(
   const expanded = expandHomePath(parentPath.trim(), home);
   const absolute = isAbsolute(expanded) ? expanded : resolve(home, expanded);
   const parentReal = await realpath(absolute);
+  const roots = await realRoots(home);
+  // Creating is checked against the same roots as listing. A picker that can
+  // only SHOW $HOME but can WRITE anywhere would be the more dangerous half
+  // left open.
+  if (!isBrowsable(parentReal, roots)) refuseOutside(parentReal, roots);
   const target = join(parentReal, name);
   await mkdir(target, { recursive: true });
   return { path: target };
@@ -167,6 +237,13 @@ case "$requested" in
   *) target="$home/$requested" ;;
 esac
 target_real="$(cd "$target" && pwd -P)"
+# Same containment as the local path: $HOME, plus anything the operator named
+# in HERDR_GUI_BROWSE_ROOTS. Without it this listed the remote machine's whole
+# filesystem to whoever could reach the bridge.
+case "$target_real" in
+  "$home"|"$home"/*) ;;
+  *) printf 'refused: %s is outside $HOME on this host\\n' "$target_real" >&2; exit 3 ;;
+esac
 printf 'HOME\\t%s\\n' "$(printf '%s' "$home" | base64 | tr -d '\\n')"
 printf 'PATH\\t%s\\n' "$(printf '%s' "$target_real" | base64 | tr -d '\\n')"
 count=0
@@ -227,6 +304,10 @@ case "$requested" in
   *) parent="$home/$requested" ;;
 esac
 parent_real="$(cd "$parent" && pwd -P)"
+case "$parent_real" in
+  "$home"|"$home"/*) ;;
+  *) printf 'refused: %s is outside $HOME on this host\\n' "$parent_real" >&2; exit 3 ;;
+esac
 mkdir -p "$parent_real/$name"
 created="$(cd "$parent_real/$name" && pwd -P)"
 printf 'PATH\\t%s\\n' "$(printf '%s' "$created" | base64 | tr -d '\\n')"
