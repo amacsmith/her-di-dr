@@ -51,13 +51,27 @@ type Flow = {
   history: string[];
 };
 
+type CheckFinding = {
+  id: string;
+  note?: string | null;
+  folder?: string | null;
+  severity?: string;
+  value?: string;
+  why?: string;
+};
+
 type DevrrState =
   | { available: false; reason: string; detail: string }
   | {
       available: true;
       checkout_path: string;
       status: { mode?: string; flows?: Flow[] } | null;
-      check: { clean?: boolean; notes?: number; errors?: unknown[]; warnings?: unknown[] } | null;
+      check: {
+        clean?: boolean;
+        notes?: number;
+        errors?: CheckFinding[];
+        warnings?: CheckFinding[];
+      } | null;
       dag: {
         acyclic?: boolean;
         counts?: { nodes?: number; requirements?: number; tasks?: number; edges?: number };
@@ -241,6 +255,17 @@ export function GovernancePanel({
   );
   const openGates = useMemo(() => flows.filter((f) => f.gate === "open"), [flows]);
 
+  // Errors first, then warnings, capped — with the count of what was dropped.
+  const FINDING_LIMIT = 12;
+  const allFindings = useMemo(() => {
+    if (!state?.available) return [];
+    const errors = (state.check?.errors ?? []).map((f) => ({ ...f, severity: f.severity ?? "error" }));
+    const warnings = (state.check?.warnings ?? []).map((f) => ({ ...f, severity: "warn" }));
+    return [...errors, ...warnings];
+  }, [state]);
+  const findingsToShow = allFindings.slice(0, FINDING_LIMIT);
+  const moreFindings = allFindings.length - findingsToShow.length;
+
   if (!workspaceId) {
     return <div className="devrr-empty">Select a workspace to see its governance.</div>;
   }
@@ -316,8 +341,16 @@ export function GovernancePanel({
           <span className={state.check?.clean ? "devrr-pill ok" : "devrr-pill bad"}>
             {state.check?.clean
               ? `vault clean · ${state.check?.notes ?? 0} notes`
-              : `${state.check?.errors?.length ?? 0} finding(s)`}
+              : `${state.check?.errors?.length ?? 0} error(s)`}
           </span>
+          {/* Warnings were not shown at all, and the ones that matter most here
+              are warnings by design: evidence that is derived, or that git does
+              not track, is exactly the "passes on my machine" class. A panel
+              that shows only errors hides the findings whose whole point is
+              that nothing is failing yet. */}
+          {(state.check?.warnings?.length ?? 0) > 0 ? (
+            <span className="devrr-pill warn">{state.check?.warnings?.length} warning(s)</span>
+          ) : null}
           <span className={state.dag?.acyclic === false ? "devrr-pill bad" : "devrr-pill ok"}>
             {state.dag?.acyclic === false ? "graph has a cycle" : "graph acyclic"}
           </span>
@@ -413,6 +446,30 @@ export function GovernancePanel({
           );
         })
       )}
+
+      {findingsToShow.length ? (
+        <>
+          <h4 className="devrr-heading">Findings</h4>
+          <ul className="devrr-findings">
+            {findingsToShow.map((finding, i) => (
+              <li key={`${finding.id}-${finding.note ?? finding.folder ?? i}`} className={finding.severity === "warn" ? "warn" : "error"}>
+                <code>{finding.id}</code>
+                {finding.note || finding.folder ? (
+                  <span className="devrr-quiet">{finding.note ?? finding.folder}</span>
+                ) : null}
+                {finding.value ? <span className="devrr-value">{finding.value}</span> : null}
+              </li>
+            ))}
+          </ul>
+          {moreFindings > 0 ? (
+            // Never a silent truncation: a list that quietly stops reads as a
+            // project with fewer problems than it has.
+            <p className="devrr-quiet">
+              {moreFindings} more — run <code>devrr check</code> for all of them.
+            </p>
+          ) : null}
+        </>
+      ) : null}
 
       <h4 className="devrr-heading">Ready now</h4>
       {(state?.available && state.dag?.ready?.length) ? (
