@@ -25,3 +25,4 @@ server/*.bun-build
 # records are unfixed. Publishing it would disclose them before the upstream
 # maintainer has had a chance to act.
 vault/
+SECURITY-DISCLOSURE-DRAFT.md
