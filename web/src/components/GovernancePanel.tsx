@@ -91,6 +91,16 @@ export function GovernancePanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [handle, setHandle] = useState<string>(() => readHandle());
+  // ONE form open at a time. Five owed checkpoints each with a permanently
+  // visible evidence field is a wall of inputs nobody reads; and every one of
+  // these writes to an append-only record, so the deliberate click that opens
+  // the form is worth keeping.
+  const [acting, setActing] = useState<
+    | { kind: "checkpoint"; note: string; id: string }
+    | { kind: "work"; note: string }
+    | null
+  >(null);
+  const [evidence, setEvidence] = useState("");
 
   const load = useCallback(async () => {
     if (!client || !workspaceId) return;
@@ -145,6 +155,84 @@ export function GovernancePanel({
       }
     },
     [client, workspaceId, handle, load],
+  );
+
+  /**
+   * Discharge a checkpoint, or close a piece of work.
+   *
+   * Both send the evidence the user typed and show devrr's answer. Neither
+   * checks the evidence here: "a repo-relative path to a file" is devrr's rule,
+   * and a copy of it in this panel would be a second rule that could disagree
+   * with the first — which is exactly how the rule went wrong twice before.
+   */
+  const submit = useCallback(async () => {
+    if (!client || !workspaceId || !acting) return;
+    const cited = evidence.trim();
+    const who = handle.trim();
+    setBusy("submit");
+    setError(null);
+    try {
+      // `actor` as well as `by`. Clearing a checkpoint is agent-writable, so
+      // devrr does not demand a handle for it — and without one the record
+      // read `agent` for something a PERSON had just clicked. The chain should
+      // say who was at the keyboard.
+      const common = {
+        workspace_id: workspaceId,
+        note: acting.note,
+        evidence: cited ? [cited] : [],
+        by: who || undefined,
+        actor: who || undefined,
+      };
+      if (acting.kind === "checkpoint") {
+        await client.call("devrr.checkpoint", { ...common, id: acting.id, state: "cleared" });
+      } else {
+        await client.call("devrr.work", { ...common, status: "done" });
+      }
+      setActing(null);
+      setEvidence("");
+      await load();
+    } catch (e) {
+      // devrr's refusal, verbatim. The form stays open with what was typed,
+      // because the reason usually names the thing to change.
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }, [client, workspaceId, acting, evidence, handle, load]);
+
+  const actionForm = (label: string) => (
+    <div className="devrr-action">
+      <label>
+        {label}
+        <input
+          type="text"
+          value={evidence}
+          spellCheck={false}
+          autoFocus
+          placeholder="src/thing.mjs — a file, not a sentence"
+          onChange={(e) => setEvidence(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+            if (e.key === "Escape") {
+              setActing(null);
+              setEvidence("");
+            }
+          }}
+        />
+      </label>
+      <button type="button" className="devrr-approve" disabled={busy !== null} onClick={() => void submit()}>
+        Record
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setActing(null);
+          setEvidence("");
+        }}
+      >
+        Cancel
+      </button>
+    </div>
   );
 
   const flows = useMemo(
@@ -266,13 +354,32 @@ export function GovernancePanel({
               ) : null}
               {flow.needs.length ? (
                 <ul className="devrr-needs">
-                  {flow.needs.map((need) => (
-                    <li key={need.id} className={need.state === "cleared" || need.state === "waived" ? "met" : "owed"}>
-                      <code>{need.id}</code> <span>{need.state}</span>
-                    </li>
-                  ))}
+                  {flow.needs.map((need) => {
+                    const met = need.state === "cleared" || need.state === "waived";
+                    return (
+                      <li key={need.id} className={met ? "met" : "owed"}>
+                        <code>{need.id}</code> <span>{need.state}</span>
+                        {met ? null : (
+                          <button
+                            type="button"
+                            className="devrr-inline"
+                            title="Discharge this with evidence"
+                            onClick={() => {
+                              setActing({ kind: "checkpoint", note: flow.id, id: need.id });
+                              setEvidence("");
+                            }}
+                          >
+                            clear…
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : null}
+              {acting?.kind === "checkpoint" && acting.note === flow.id
+                ? actionForm(`Evidence that ${acting.id} is discharged`)
+                : null}
               <div className="devrr-gate-actions">
                 <button
                   type="button"
@@ -313,6 +420,20 @@ export function GovernancePanel({
           {state.dag.ready.map((id) => (
             <li key={id}>
               <code>{id}</code>
+              <button
+                type="button"
+                className="devrr-inline"
+                title="Record this as done, with the file that proves it"
+                onClick={() => {
+                  setActing({ kind: "work", note: id });
+                  setEvidence("");
+                }}
+              >
+                done…
+              </button>
+              {acting?.kind === "work" && acting.note === id
+                ? actionForm(`Evidence that ${id} is done`)
+                : null}
             </li>
           ))}
         </ul>

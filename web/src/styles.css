@@ -8767,3 +8767,55 @@ textarea:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.devrr-inline {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.72rem;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.devrr-inline:hover { opacity: 1; }
+.devrr-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 5px;
+  border: 1px dashed var(--border, rgba(128, 128, 128, 0.4));
+}
+.devrr-action label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1 1 16rem;
+  font-size: 0.74rem;
+  opacity: 0.8;
+}
+.devrr-action input {
+  padding: 0.28rem 0.45rem;
+  font: inherit;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.35));
+  background: transparent;
+  color: inherit;
+}
+.devrr-action button {
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.35));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.devrr-ready li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem; }
+.devrr-ready li .devrr-action { flex-basis: 100%; }

@@ -240,4 +240,43 @@ describe("devrr service", () => {
     });
     expect(rejected.decision).toBe("reject");
   });
+
+  test("the person at the keyboard is the actor, not `agent`", async () => {
+    if (!(await devrrInstalled())) {
+      console.warn("SKIPPED: devrr is not on PATH");
+      return;
+    }
+    // Clearing a checkpoint is agent-writable, so devrr demands no handle for
+    // it — and the chain then recorded `agent` for something a person clicked.
+    const checkout = mkdtempSync(join(tmpdir(), "devrr-actor-"));
+    await runBinaryProcessWithTimeout(["git", "-C", checkout, "init", "-q"], 10_000);
+    const vault = join(checkout, "vault");
+    await runBinaryProcessWithTimeout(["devrr", "init", "--vault", vault], 20_000);
+    await runBinaryProcessWithTimeout(
+      ["devrr", "new", "intake", "--title", "An idea", "--vault", vault],
+      20_000,
+    );
+    await runBinaryProcessWithTimeout(
+      ["devrr", "advance", "intake/an-idea", "--vault", vault],
+      20_000,
+    );
+
+    await serviceFor(checkout).checkpoint({
+      workspace_id: "w1",
+      note: "intake/an-idea",
+      id: "research-brief-written",
+      state: "cleared",
+      evidence: ["vault/schema/config.md"],
+      actor: "mac",
+    });
+
+    const tail = await runBinaryProcessWithTimeout(
+      ["devrr", "audit", "tail", "1", "--vault", vault],
+      20_000,
+    );
+    const line = tail.stdout.toString("utf8");
+    expect(line).toContain("checkpoint");
+    expect(line).toContain("mac");
+    expect(line).not.toContain("agent");
+  });
 });

@@ -256,10 +256,14 @@ export function createDevrrService(deps: {
     if (!state_) throw new Error("devrr.checkpoint requires state");
     const evidence = Array.isArray(params.evidence) ? params.evidence.map((e) => String(e)) : [];
     const by = params.by ? assertHandle(params.by, "devrr.checkpoint") : null;
+    const actor = params.actor ? assertHandle(params.actor, "devrr.checkpoint") : null;
 
     const args = ["checkpoint", note, id, state_];
     for (const e of evidence) args.push("--evidence", e);
     if (by) args.push("--by", by);
+    // Clearing a checkpoint is agent-writable, so devrr asks for no handle —
+    // and the record then said `agent` for something a person clicked.
+    if (actor) args.push("--actor", actor);
     const result = await run(checkoutPath, args);
     if (result.code !== 0) throw new Error((result.stderr || result.stdout).trim().slice(0, 500));
     return { note, id, state: state_, output: result.stdout.trim() };
@@ -273,10 +277,12 @@ export function createDevrrService(deps: {
     if (!status) throw new Error("devrr.work requires status");
     const evidence = Array.isArray(params.evidence) ? params.evidence.map((e) => String(e)) : [];
     const by = params.by ? assertHandle(params.by, "devrr.work") : null;
+    const actor = params.actor ? assertHandle(params.actor, "devrr.work") : null;
 
     const args = ["work", note, status];
     for (const e of evidence) args.push("--evidence", e);
     if (by) args.push("--by", by);
+    if (actor) args.push("--actor", actor);
     const result = await run(checkoutPath, args);
     if (result.code !== 0) throw new Error((result.stderr || result.stdout).trim().slice(0, 500));
     return { note, status, output: result.stdout.trim() };
