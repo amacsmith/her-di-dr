@@ -26,6 +26,47 @@
 
 import { runBinaryProcessWithTimeout } from "./process";
 
+/**
+ * Run a binary IN a directory.
+ *
+ * `runBinaryProcessWithTimeout` cannot set a working directory, which is why
+ * the first version of this file passed `--vault <checkout>/vault` — and that
+ * hardcoded devrr's most common layout as its only one. devrr resolves a vault
+ * itself: `vault/` first, then a single `*-vault/` directory. A real workspace
+ * on this machine (`synapse-dispatch`, whose vault is `reslax-vault/`) would
+ * have been reported as ungoverned. Let devrr answer the question it already
+ * knows how to answer.
+ */
+async function runIn(cwd: string, argv: string[], timeoutMs: number) {
+  const proc = Bun.spawn(argv, {
+    cwd,
+    env: { ...process.env, COPYFILE_DISABLE: "1" },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const output = Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]).then(([code, stdout, stderr]) => {
+    if (timer) clearTimeout(timer);
+    return { code, stdout, stderr };
+  });
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      try {
+        proc.kill();
+      } catch {
+        /* already gone */
+      }
+      reject(new Error(`${argv[0]} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  return Promise.race([output, timeout]);
+}
+
 const DEVRR_TIMEOUT_MS = 20_000;
 
 /** Handles devrr will accept in a permanent record. */
@@ -82,17 +123,16 @@ export function createDevrrService(deps: {
   const { getWorkspace, explorerRoot, sshHost } = deps;
 
   async function run(cwd: string, args: string[]): Promise<DevrrRun> {
-    const result = await runBinaryProcessWithTimeout(
-      ["devrr", ...args, "--vault", `${cwd}/vault`],
-      DEVRR_TIMEOUT_MS,
-    );
+    // No `--vault`: devrr finds its own, and a workspace whose vault is named
+    // `<project>-vault` is governed just as much as one with `vault/`.
+    const result = await runIn(cwd, ["devrr", ...args], DEVRR_TIMEOUT_MS);
     return {
       // devrr exits 1 for findings and 2 for usage errors. Findings are an
       // ANSWER, not a failure — a vault with problems is exactly what the panel
       // exists to show — so only a usage error or a crash is `ok: false`.
       ok: result.code === 0 || result.code === 1,
       code: result.code,
-      stdout: result.stdout.toString("utf8"),
+      stdout: result.stdout,
       stderr: result.stderr,
     };
   }

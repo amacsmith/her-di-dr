@@ -76,6 +76,24 @@ describe("devrr service", () => {
     expect(state.detail).toContain("devrr init");
   });
 
+  test("a vault named <project>-vault is found, not reported as ungoverned", async () => {
+    if (!(await devrrInstalled())) {
+      console.warn("SKIPPED: devrr is not on PATH");
+      return;
+    }
+    // The reslax convention, and a real workspace on this machine uses it. The
+    // first version of this service hardcoded `--vault <checkout>/vault` and
+    // would have called that project ungoverned.
+    const checkout = mkdtempSync(join(tmpdir(), "devrr-named-"));
+    await runBinaryProcessWithTimeout(["git", "-C", checkout, "init", "-q"], 10_000);
+    await runBinaryProcessWithTimeout(
+      ["devrr", "init", "--vault", join(checkout, "thing-vault")],
+      20_000,
+    );
+    const state = await serviceFor(checkout).state({ workspace_id: "w1" });
+    expect(state.available).toBe(true);
+  });
+
   test("an ssh workspace says so rather than answering about this machine", async () => {
     const state = await serviceFor("/anywhere", "build-box").state({ workspace_id: "w1" });
     expect(state.available).toBe(false);
