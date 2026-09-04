@@ -4,6 +4,7 @@ import {
   FolderTree,
   GitFork,
   History,
+  ShieldCheck,
   Maximize2,
   Minimize2,
   PanelBottom,
@@ -20,6 +21,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MutableRefObject,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -50,6 +52,7 @@ import {
   type ActiveFilePreviewSelection,
   FilePreviewContent,
 } from "./FilePreviewContent";
+import { GovernancePanel } from "./GovernancePanel";
 import { workspaceInspectorLayout } from "./workspaceInspectorLayout";
 
 const DiffContentView = lazy(() =>
@@ -219,6 +222,7 @@ export function WorkspaceInspectorHost({
   const filesTabRef = useRef<HTMLButtonElement | null>(null);
   const changesTabRef = useRef<HTMLButtonElement | null>(null);
   const historyTabRef = useRef<HTMLButtonElement | null>(null);
+  const governanceTabRef = useRef<HTMLButtonElement | null>(null);
   const diffViewerRef = useRef<DiffViewerPanelHandle | null>(null);
   const splitId = useId();
   const [hostWidth, setHostWidth] = useState(0);
@@ -232,6 +236,9 @@ export function WorkspaceInspectorHost({
     files: state.view === "files" && !!fileSelection.entry,
     changes: false,
     history: false,
+    // Governance never drills in: it is one view of the whole vault, not a
+    // list you open an item from.
+    governance: false,
   }));
   const resourceKey = resourceOwnerKey(state.scope);
   const contentResourceKey = resourceStateKey(state.scope);
@@ -317,8 +324,8 @@ export function WorkspaceInspectorHost({
       return;
     }
     const views: InspectorView[] = historyAvailable
-      ? ["files", "changes", "history"]
-      : ["files", "changes"];
+      ? ["files", "changes", "history", "governance"]
+      : ["files", "changes", "governance"];
     const currentIndex = Math.max(0, views.indexOf(state.view));
     const nextView: InspectorView | undefined =
       event.key === "Home"
@@ -333,10 +340,14 @@ export function WorkspaceInspectorHost({
     if (!nextView) return;
     event.preventDefault();
     onViewChange(nextView);
-    const refs = {
+    const refs: Record<
+      InspectorView,
+      MutableRefObject<HTMLButtonElement | null>
+    > = {
       files: filesTabRef,
       changes: changesTabRef,
       history: historyTabRef,
+      governance: governanceTabRef,
     };
     refs[nextView].current?.focus();
   };
@@ -437,6 +448,19 @@ export function WorkspaceInspectorHost({
             onKeyDown={handleTabKeyDown}
           >
             <History size={14} /> History
+          </button>
+          <button
+            ref={governanceTabRef}
+            type="button"
+            role="tab"
+            aria-selected={state.view === "governance"}
+            tabIndex={state.view === "governance" ? 0 : -1}
+            className={state.view === "governance" ? "is-active" : ""}
+            title="What this project owes, and what is waiting on a human"
+            onClick={() => onViewChange("governance")}
+            onKeyDown={handleTabKeyDown}
+          >
+            <ShieldCheck size={14} /> Governance
           </button>
         </div>
         <div className="workspace-inspector-actions">
@@ -700,6 +724,17 @@ export function WorkspaceInspectorHost({
                 <span>Select an agent pane to inspect its history.</span>
               </div>
             )}
+          </div>
+          <div
+            className={`workspace-inspector-resource inspector-governance-resource ${
+              state.view === "governance" ? "" : "is-hidden"
+            }`}
+          >
+            <GovernancePanel
+              client={connectionClient ?? null}
+              workspaceId={workspace?.workspace_id ?? null}
+              active={state.open && state.view === "governance"}
+            />
           </div>
         </div>
       )}

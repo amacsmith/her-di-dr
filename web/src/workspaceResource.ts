@@ -1,7 +1,9 @@
 import type { Workspace } from "./types";
 import { connectionStorageKey } from "./connectionStorage";
 
-export type InspectorView = "files" | "changes" | "history";
+// `governance` is devrr: what this workspace's project owes, what is waiting on
+// a human, and whether its vault and task graph are clean.
+export type InspectorView = "files" | "changes" | "history" | "governance";
 export type WorkspaceSurface = "terminal" | InspectorView;
 export const WORKSPACE_INSPECTOR_REQUEST_EVENT =
   "herdr:workspace-inspector-request";

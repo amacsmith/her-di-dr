@@ -20,3 +20,8 @@ server/herdr-gui
 server/herdr-gui-*
 server/*.bun-build
 .repo_memory/
+
+# The devrr vault is local-only while the upstream security findings it
+# records are unfixed. Publishing it would disclose them before the upstream
+# maintainer has had a chance to act.
+vault/

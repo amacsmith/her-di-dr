@@ -395,6 +395,11 @@ export function createFileHandlers({
   }
 
   return {
+    // Exposed so other workspace services resolve a checkout the SAME way the
+    // file explorer does — a second copy of "where is this workspace" would
+    // eventually answer differently for a worktree or a pane-derived path.
+    getWorkspace,
+    explorerRoot,
     listWorkspaceFiles: listFiles,
     resolveWorkspaceFiles: resolveFiles,
     readWorkspaceFile: readFile,

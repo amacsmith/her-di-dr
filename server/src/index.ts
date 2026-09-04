@@ -728,6 +728,49 @@ async function handleRpc(ws: ServerWebSocket<unknown>, raw: string) {
     }
     return;
   }
+  // ---- devrr: project governance for this workspace ----------------------
+  //
+  // Every one of these runs the devrr CLI in the workspace's checkout. The
+  // refusals a caller sees — "a gate cannot be approved while a checkpoint is
+  // outstanding", "evidence is a repo-relative path, not a sentence" — are
+  // devrr's own, reported verbatim, because a second implementation of a rule
+  // is a second rule.
+  if (method === "devrr.state") {
+    try {
+      const result = await connection.devrr.state(params ?? {});
+      sendReply({ id, result }, "devrr-state");
+    } catch (e) {
+      sendError("devrr-state-error", e);
+    }
+    return;
+  }
+  if (method === "devrr.gate") {
+    try {
+      const result = await connection.devrr.gate(params ?? {});
+      sendReply({ id, result }, "devrr-gate");
+    } catch (e) {
+      sendError("devrr-gate-error", e);
+    }
+    return;
+  }
+  if (method === "devrr.checkpoint") {
+    try {
+      const result = await connection.devrr.checkpoint(params ?? {});
+      sendReply({ id, result }, "devrr-checkpoint");
+    } catch (e) {
+      sendError("devrr-checkpoint-error", e);
+    }
+    return;
+  }
+  if (method === "devrr.work") {
+    try {
+      const result = await connection.devrr.work(params ?? {});
+      sendReply({ id, result }, "devrr-work");
+    } catch (e) {
+      sendError("devrr-work-error", e);
+    }
+    return;
+  }
   if (method === "file.list") {
     try {
       const result = await listWorkspaceFiles(params ?? {});

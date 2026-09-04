@@ -20,6 +20,7 @@ import {
 import { createWorkspaceAutoSync } from "../workspace/auto-sync";
 import { createDirectoryHandlers } from "../workspace/directories";
 import { createFileHandlers } from "../workspace/files";
+import { createDevrrService } from "../workspace/devrr";
 import {
   createLastStepBaselineStore,
   type LastStepBaselineStore,
@@ -122,6 +123,14 @@ export function createLegacyConnectionRuntime(args: {
     runProcessWithCodeTimeout,
     shQuote,
     lastStepBaselines,
+  });
+  // devrr governs the project inside a workspace. It resolves the checkout
+  // through the same helpers the file explorer uses, so the two can never
+  // disagree about where a workspace is.
+  const devrr = createDevrrService({
+    getWorkspace: files.getWorkspace,
+    explorerRoot: files.explorerRoot,
+    sshHost: () => sshHost() ?? null,
   });
   const directories = createDirectoryHandlers({
     sshHost,
@@ -364,6 +373,7 @@ export function createLegacyConnectionRuntime(args: {
     handleImageUpload,
     handleSettingsRpc,
     files,
+    devrr,
     directories,
     status,
     workspaceAutoSync,
